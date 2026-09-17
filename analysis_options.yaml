@@ -14,5 +14,3 @@ linter:
     # This code intentionally performs work across async gaps and checks
     # `mounted` before using the BuildContext afterward.
     use_build_context_synchronously: false
-    # Some values in the location service are promoted to non-null already.
-    unnecessary_non_null_assertion: false
