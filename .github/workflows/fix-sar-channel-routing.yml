@@ -55,8 +55,8 @@ jobs:
 
           replace_once(
               'lib/screens/map_tab.dart',
-              '''          channelIdx: 0,\n''',
-              '''          channelIdx: _sarChannelIndex(roomPublicKey),\n''',
+              '''        await connectionProvider.sendChannelMessage(\n          channelIdx: 0,\n          text: sarMessage,\n          messageId: messageId,\n        );\n''',
+              '''        await connectionProvider.sendChannelMessage(\n          channelIdx: _sarChannelIndex(roomPublicKey),\n          text: sarMessage,\n          messageId: messageId,\n        );\n''',
           )
 
       - name: Commit fix and remove migration workflow
