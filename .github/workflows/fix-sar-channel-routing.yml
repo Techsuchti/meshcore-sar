@@ -37,23 +37,43 @@ jobs:
 
           ensure_replacement(
               'lib/widgets/messages/sar_update_sheet.dart',
-              '''                              _sendToAllContacts\n                                  ? null\n                                  : (_selectedContact!.isChannel\n                                        ? null\n                                        : _selectedContact!.publicKey),\n''',
-              '''                              _sendToAllContacts\n                                  ? null\n                                  : _selectedContact!.publicKey,\n''',
+              '''                              _sendToAllContacts
+                                  ? null
+                                  : (_selectedContact!.isChannel
+                                        ? null
+                                        : _selectedContact!.publicKey),
+''',
+              '''                              _sendToAllContacts
+                                  ? null
+                                  : _selectedContact!.publicKey,
+''',
           )
 
           ensure_replacement(
               'lib/widgets/messages/custom_map_sar_update_sheet.dart',
-              '''                      _selectedContact?.isChannel == true\n                          ? null\n                          : _selectedContact?.publicKey,\n''',
-              '''                      _selectedContact?.publicKey,\n''',
+              '''                      _selectedContact?.isChannel == true
+                          ? null
+                          : _selectedContact?.publicKey,
+''',
+              '''                      _selectedContact?.publicKey,
+''',
           )
 
           map_path = Path('lib/screens/map_tab.dart')
           map_text = map_path.read_text(encoding='utf-8')
 
-          helper = '''  int _sarChannelIndex(Uint8List? channelPublicKey) {\n    if (channelPublicKey == null || channelPublicKey.length < 2) {\n      return 0;\n    }\n    return channelPublicKey[1];\n  }\n\n'''
+          helper = '''  int _sarChannelIndex(Uint8List? channelPublicKey) {
+    if (channelPublicKey == null || channelPublicKey.length < 2) {
+      return 0;
+    }
+    return channelPublicKey[1];
+  }
+
+'''
 
           if '_sarChannelIndex(Uint8List? channelPublicKey)' not in map_text:
-              marker = '  Future<void> _sendSarPayload({\n'
+              marker = '  Future<void> _sendSarPayload({
+'
               if marker not in map_text:
                   raise SystemExit('lib/screens/map_tab.dart: _sendSarPayload marker not found')
               map_text = map_text.replace(marker, helper + marker, 1)
@@ -61,14 +81,25 @@ jobs:
           else:
               print('lib/screens/map_tab.dart: channel-index helper already present')
 
-          method_start = map_text.find('  Future<void> _sendSarPayload({\n')
+          method_start = map_text.find('  Future<void> _sendSarPayload({
+')
           if method_start < 0:
               raise SystemExit('lib/screens/map_tab.dart: _sendSarPayload method not found')
 
           prefix = map_text[:method_start]
           method = map_text[method_start:]
-          old_channel = '''        await connectionProvider.sendChannelMessage(\n          channelIdx: 0,\n          text: sarMessage,\n          messageId: messageId,\n        );\n'''
-          new_channel = '''        await connectionProvider.sendChannelMessage(\n          channelIdx: _sarChannelIndex(roomPublicKey),\n          text: sarMessage,\n          messageId: messageId,\n        );\n'''
+          old_channel = '''        await connectionProvider.sendChannelMessage(
+          channelIdx: 0,
+          text: sarMessage,
+          messageId: messageId,
+        );
+'''
+          new_channel = '''        await connectionProvider.sendChannelMessage(
+          channelIdx: _sarChannelIndex(roomPublicKey),
+          text: sarMessage,
+          messageId: messageId,
+        );
+'''
 
           if new_channel in method:
               print('lib/screens/map_tab.dart: SAR channel routing already patched')
@@ -82,16 +113,23 @@ jobs:
 
           map_path.write_text(map_text, encoding='utf-8')
 
-          # Final verification before committing.
+          # Final verification uses exact source fragments, not escaped literal \n text.
           checks = {
-              'lib/widgets/messages/sar_update_sheet.dart': '_sendToAllContacts\\n                                  ? null\\n                                  : _selectedContact!.publicKey,',
-              'lib/widgets/messages/custom_map_sar_update_sheet.dart': '_selectedContact?.publicKey,',
+              'lib/widgets/messages/sar_update_sheet.dart': (
+                  '                              _sendToAllContacts\n'
+                  '                                  ? null\n'
+                  '                                  : _selectedContact!.publicKey,\n'
+              ),
+              'lib/widgets/messages/custom_map_sar_update_sheet.dart': (
+                  '                      _selectedContact?.publicKey,\n'
+              ),
               'lib/screens/map_tab.dart': 'channelIdx: _sarChannelIndex(roomPublicKey),',
           }
           for path, needle in checks.items():
               text = Path(path).read_text(encoding='utf-8')
               if needle not in text:
                   raise SystemExit(f'{path}: final verification failed')
+              print(f'{path}: verification OK')
 
       - name: Commit fix and remove migration workflow
         shell: bash
