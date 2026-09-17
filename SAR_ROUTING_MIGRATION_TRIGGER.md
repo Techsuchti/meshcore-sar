@@ -1,0 +1,1 @@
+Temporary migration trigger. This file is removed automatically after the SAR channel routing fix is applied.
