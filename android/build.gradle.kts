@@ -18,20 +18,16 @@ subprojects {
 
 subprojects {
     project.evaluationDependsOn(":app")
-}
 
-// flutter_avif_android 3.1.0 contains the plugin implementation under the
-// Kotlin source tree. Make that tree visible as Java/Kotlin source to AGP so
-// Flutter's GeneratedPluginRegistrant can resolve FlutterAvifPlugin.
-project(":app") {
-    afterEvaluate {
-        val avifProject = rootProject.findProject(":flutter_avif_android")
-        if (avifProject != null) {
-            avifProject.afterEvaluate {
-                extensions.findByName("android")?.let { ext ->
-                    (ext as com.android.build.gradle.BaseExtension)
-                        .sourceSets.getByName("main").java
-                        .srcDirs("src/main/kotlin")
+    // flutter_avif_android 3.1.0 accidentally ships the same
+    // FlutterAvifPlugin class as both Java and Kotlin source.
+    // AGP 8.9+ compiles both source trees and the duplicate breaks Android builds.
+    // Keep the Kotlin implementation, which is the class registered by the plugin.
+    if (project.name == "flutter_avif_android") {
+        project.plugins.withId("com.android.library") {
+            project.extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
+                sourceSets.getByName("main") {
+                    java.setSrcDirs(listOf("src/main/kotlin"))
                 }
             }
         }
