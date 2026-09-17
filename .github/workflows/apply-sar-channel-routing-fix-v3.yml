@@ -1,0 +1,202 @@
+name: Apply SAR Channel Routing Fix v3
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-sar-channel-routing-fix-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.41.4"
+
+jobs:
+  patch-build-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch SAR routing
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def patch(path, pattern, replacement, expected=None, flags=0):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              text2, count = re.subn(pattern, replacement, text, flags=flags)
+              if expected is not None and count != expected:
+                  raise SystemExit(f'{path}: expected {expected} matches, got {count}')
+              if count:
+                  p.write_text(text2, encoding='utf-8')
+              print(f'{path}: {count} replacements')
+
+          # Callback types: carry the channel index explicitly instead of
+          # reconstructing it later from the pseudo public key.
+          patch(
+              'lib/widgets/messages/sar_update_sheet.dart',
+              r'(    bool sendToAllContacts,\n    int colorIndex,\n)(  \)\n  onSend;)',
+              r'\1    int? channelIndex,\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/widgets/messages/custom_map_sar_update_sheet.dart',
+              r'(    bool sendToAllContacts,\n    int colorIndex,\n)(  \)\n  onSend;)',
+              r'\1    int? channelIndex,\n\2',
+              expected=1,
+          )
+
+          # Pass the selected channel index from each SAR sheet.
+          for path in [
+              'lib/widgets/messages/sar_update_sheet.dart',
+              'lib/widgets/messages/custom_map_sar_update_sheet.dart',
+          ]:
+              patch(
+                  path,
+                  r'(\s+_selectedTemplate!\.colorIndex,\n)(\s+\);)',
+                  r'\1                              !_sendToAllContacts &&\n                                      _selectedContact?.isChannel == true &&\n                                      _selectedContact!.publicKey.length > 1\n                                  ? _selectedContact!.publicKey[1]\n                                  : null,\n\2',
+                  expected=1,
+              )
+
+          # Add the explicit channelIndex parameter to the two MapTab callbacks
+          # and forward it into the SAR send methods.
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(              sendToAllContacts,\n              colorIndex,\n)(            \) async \{\n              await _sendSarMessage\()',
+              r'\1              channelIndex,\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(              sendToAllContacts,\n              colorIndex,\n)(            \) async \{\n              await _sendCustomMapSarMessage\()',
+              r'\1              channelIndex,\n\2',
+              expected=1,
+          )
+
+          # Forward channelIndex in the calls.
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(                sendToAllContacts,\n                colorIndex,\n)(              \);\n            \},)',
+              r'\1                channelIndex,\n\2',
+              expected=2,
+          )
+
+          # Add channelIndex to the two SAR message method signatures.
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(  Future<void> _sendSarMessage\([\s\S]*?    bool sendToAllContacts,\n    int colorIndex,\n)(  \) async \{)',
+              r'\1    int? channelIndex,\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(  Future<void> _sendCustomMapSarMessage\([\s\S]*?    bool sendToAllContacts,\n    int colorIndex,\n)(  \) async \{)',
+              r'\1    int? channelIndex,\n\2',
+              expected=1,
+          )
+
+          # Forward channelIndex to _sendSarPayload from both methods.
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(  Future<void> _sendSarMessage\([\s\S]*?      sendToAllContacts: sendToAllContacts,\n)(    \);)',
+              r'\1      channelIndex: channelIndex,\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(  Future<void> _sendCustomMapSarMessage\([\s\S]*?      sendToAllContacts: sendToAllContacts,\n)(    \);)',
+              r'\1      channelIndex: channelIndex,\n\2',
+              expected=1,
+          )
+
+          # Add the explicit index to _sendSarPayload and use it for the
+          # actual MeshCore channel command and local sent-message metadata.
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(  Future<void> _sendSarPayload\([\s\S]*?    bool sendToAllContacts,\n)(  \}) async \{)',
+              r'\1    int? channelIndex,\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(      if \(sendToChannel\) \{\n)(        final messageId =)',
+              r'\1        final selectedChannelIdx = channelIndex ?? _sarChannelIndex(roomPublicKey);\n        debugPrint(\'📍 [SAR] selected channelIndex=\$selectedChannelIdx explicit=\$channelIndex keyPrefix=\${roomPublicKey != null && roomPublicKey.length >= 2 ? roomPublicKey.sublist(0, 2) : null}\');\n\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(channelIdx: )_sarChannelIndex\(roomPublicKey\)(,\n\s+text: sarMessage,)',
+              r'\1selectedChannelIdx\2',
+              expected=1,
+          )
+          patch(
+              'lib/screens/map_tab.dart',
+              r'(          channelIdx: )0(,\n        \);\n\n        messagesProvider\.addSentMessage\(sentMessage\);)',
+              r'\1selectedChannelIdx\2',
+              expected=1,
+          )
+
+          Path('SAR_ROUTING_V3_APPLIED.md').write_text(
+              'Explicit SAR channel index propagation applied.\n',
+              encoding='utf-8',
+          )
+      - name: Verify and analyze
+        run: |
+          grep -n "int? channelIndex" lib/widgets/messages/sar_update_sheet.dart lib/widgets/messages/custom_map_sar_update_sheet.dart lib/screens/map_tab.dart
+          grep -n "selectedChannelIdx" lib/screens/map_tab.dart
+          flutter --version || true
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      - name: Upload patched APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sar-channel-routing-v3-android
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Commit patched source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/widgets/messages/sar_update_sheet.dart lib/widgets/messages/custom_map_sar_update_sheet.dart lib/screens/map_tab.dart SAR_ROUTING_V3_APPLIED.md
+          git commit -m "fix: propagate explicit SAR channel index" || true
+          git push || true
+
+      - name: Remove temporary workflows
+        if: always()
+        shell: bash
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/apply-sar-channel-routing-fix-v3.yml .github/workflows/apply-sar-channel-routing-fix-v2.yml 2>/dev/null || true
+          git commit -m "chore: remove temporary SAR routing workflows" || true
+          git push || true
