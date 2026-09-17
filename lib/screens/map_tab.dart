@@ -2422,6 +2422,13 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  int _sarChannelIndex(Uint8List? channelPublicKey) {
+    if (channelPublicKey == null || channelPublicKey.length < 2) {
+      return 0;
+    }
+    return channelPublicKey[1];
+  }
+
   Future<void> _sendSarPayload({
     required String sarMessage,
     required Uint8List? roomPublicKey,
@@ -2572,7 +2579,7 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
         messagesProvider.addSentMessage(sentMessage);
 
         await connectionProvider.sendChannelMessage(
-          channelIdx: 0,
+          channelIdx: _sarChannelIndex(roomPublicKey),
           text: sarMessage,
           messageId: messageId,
         );

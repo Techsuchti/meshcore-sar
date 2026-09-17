@@ -447,9 +447,7 @@ class _CustomMapSarUpdateSheetState extends State<CustomMapSarUpdateSheet> {
                       _notesController.text.trim().isEmpty
                           ? _selectedTemplate!.name
                           : _notesController.text.trim(),
-                      _selectedContact?.isChannel == true
-                          ? null
-                          : _selectedContact?.publicKey,
+                      _selectedContact?.publicKey,
                       _selectedContact?.isChannel == true,
                       _sendToAllContacts,
                       _templates.indexOf(_selectedTemplate!),

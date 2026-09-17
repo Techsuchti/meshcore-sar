@@ -1203,9 +1203,7 @@ class _SarUpdateSheetState extends State<SarUpdateSheet> {
                               position,
                               _sendToAllContacts
                                   ? null
-                                  : (_selectedContact!.isChannel
-                                        ? null
-                                        : _selectedContact!.publicKey),
+                                  : _selectedContact!.publicKey,
                               _sendToAllContacts
                                   ? false
                                   : _selectedContact!.isChannel,
