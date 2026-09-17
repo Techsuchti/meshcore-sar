@@ -19,10 +19,11 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(":app")
 
-    // flutter_avif_android 3.1.0 accidentally ships the same
-    // FlutterAvifPlugin class as both Java and Kotlin source.
-    // AGP 8.9+ compiles both source trees and the duplicate breaks Android builds.
-    // Keep the Kotlin implementation, which is the class registered by the plugin.
+    // flutter_avif_android 3.1.0 contains duplicate Java/Kotlin
+    // declarations of FlutterAvifPlugin. Keep the Kotlin implementation,
+    // which is the implementation registered by the plugin's pubspec.
+    // AGP 8.9+ compiles both source trees and otherwise reports a duplicate
+    // class declaration. This workaround is required until the package is fixed upstream.
     if (project.name == "flutter_avif_android") {
         project.plugins.withId("com.android.library") {
             project.extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
