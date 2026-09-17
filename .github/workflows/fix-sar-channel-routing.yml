@@ -1,0 +1,67 @@
+name: Fix SAR channel routing
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[skip sar routing fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch SAR channel routing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly 1 match, found {count}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'lib/widgets/messages/sar_update_sheet.dart',
+              '''                              _sendToAllContacts\n                                  ? null\n                                  : (_selectedContact!.isChannel\n                                        ? null\n                                        : _selectedContact!.publicKey),\n''',
+              '''                              _sendToAllContacts\n                                  ? null\n                                  : _selectedContact!.publicKey,\n''',
+          )
+
+          replace_once(
+              'lib/widgets/messages/custom_map_sar_update_sheet.dart',
+              '''                      _selectedContact?.isChannel == true\n                          ? null\n                          : _selectedContact?.publicKey,\n''',
+              '''                      _selectedContact?.publicKey,\n''',
+          )
+
+          replace_once(
+              'lib/screens/map_tab.dart',
+              '''  Future<void> _sendSarPayload({\n''',
+              '''  int _sarChannelIndex(Uint8List? channelPublicKey) {\n    if (channelPublicKey == null || channelPublicKey.length < 2) {\n      return 0;\n    }\n    return channelPublicKey[1];\n  }\n\n  Future<void> _sendSarPayload({\n''',
+          )
+
+          replace_once(
+              'lib/screens/map_tab.dart',
+              '''        await connectionProvider.sendChannelMessage(\n          channelIdx: 0,\n          text: sarMessage,\n          messageId: messageId,\n        );\n''',
+              '''        await connectionProvider.sendChannelMessage(\n          channelIdx: _sarChannelIndex(roomPublicKey),\n          text: sarMessage,\n          messageId: messageId,\n        );\n''',
+          )
+
+      - name: Commit fix and remove migration workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/fix-sar-channel-routing.yml SAR_ROUTING_MIGRATION_TRIGGER.md
+          git add lib/screens/map_tab.dart lib/widgets/messages/sar_update_sheet.dart lib/widgets/messages/custom_map_sar_update_sheet.dart .github/workflows/fix-sar-channel-routing.yml SAR_ROUTING_MIGRATION_TRIGGER.md
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: route SAR markers to selected channel [skip sar routing fix]"
+          git push
